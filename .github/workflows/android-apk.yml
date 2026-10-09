@@ -1,0 +1,143 @@
+name: Build Android APK
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'اختياري: أنشئ أو حدّث APK أصليًا بهذا الوسم (مثال: v1.0.6)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and publish APK
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install web dependencies and build React assets
+        run: |
+          npm ci
+          npm run build
+
+      - name: Restore and validate the app signing key
+        if: github.ref_type == 'tag' || inputs.release_tag != ''
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_DEBUG_KEYSTORE_BASE64" || { echo '::error::Missing repository secret ANDROID_DEBUG_KEYSTORE_BASE64'; exit 1; }
+          mkdir -p "$HOME/.android"
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > "$HOME/.android/debug.keystore"
+          chmod 600 "$HOME/.android/debug.keystore"
+          ACTUAL_CERT=$(keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey -v 2>/dev/null | sed -n 's/.*SHA256: //p' | head -n 1 | tr -d ':' | tr '[:upper:]' '[:lower:]')
+          EXPECTED_CERT=987c65ac0843c77ac0dffac9e56f0344963177959b74674f91af9924e782e999
+          if [ "$ACTUAL_CERT" != "$EXPECTED_CERT" ]; then
+            echo '::error::The signing key does not match the certificate of the currently distributed app. Replace the secret with the provided keystore Base64 file.'
+            exit 1
+          fi
+
+      - name: Build APK
+        working-directory: android
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+          RUN_NUMBER: ${{ github.run_number }}
+          EXPECTED_CERT: 987c65ac0843c77ac0dffac9e56f0344963177959b74674f91af9924e782e999
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" = "tag" ]; then
+            APP_VERSION="$REF_NAME"
+            IS_RELEASE=true
+          elif [ -n "$RELEASE_TAG_INPUT" ]; then
+            APP_VERSION="$RELEASE_TAG_INPUT"
+            IS_RELEASE=true
+          else
+            APP_VERSION="1.0.$RUN_NUMBER"
+            IS_RELEASE=false
+          fi
+          APP_VERSION_CODE=$((1000 + RUN_NUMBER))
+          ./gradlew --no-daemon assembleDebug \
+            -PappVersionCode="$APP_VERSION_CODE" \
+            -PappVersionName="$APP_VERSION" \
+            -PuseStableDebugSigning="$IS_RELEASE" \
+            -PstableDebugKeystorePath="$HOME/.android/debug.keystore"
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
+          APKSIGNER=$(find "$SDK_PATH/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          if [ "$IS_RELEASE" = true ]; then
+            "$APKSIGNER" sign \
+              --ks "$HOME/.android/debug.keystore" \
+              --ks-pass pass:android \
+              --ks-key-alias androiddebugkey \
+              --key-pass pass:android \
+              --out "$GITHUB_WORKSPACE/Sonds.apk" \
+              "$GITHUB_WORKSPACE/android/app/build/outputs/apk/debug/app-debug.apk"
+          else
+            cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/Sonds.apk"
+          fi
+          cd "$GITHUB_WORKSPACE"
+          sha256sum Sonds.apk > Sonds.apk.sha256
+          if [ "$IS_RELEASE" = true ]; then
+            APK_CERT_OUTPUT=$("$APKSIGNER" verify --print-certs Sonds.apk 2>&1)
+            printf 'APK signer verification output:\n%s\n' "$APK_CERT_OUTPUT"
+            APK_CERT=$(printf '%s\n' "$APK_CERT_OUTPUT" | tr -d ':' | grep -i 'sha' | grep -oE '[[:xdigit:]]{64}' | head -n 1 | tr '[:upper:]' '[:lower:]' || true)
+            echo "APK signer certificate: $APK_CERT"
+            if [ "$APK_CERT" != "$EXPECTED_CERT" ]; then
+              echo "::error::Built APK signer mismatch. Expected $EXPECTED_CERT; received $APK_CERT."
+              exit 1
+            fi
+          fi
+          echo "IS_RELEASE=$IS_RELEASE" >> "$GITHUB_ENV"
+
+      - name: Save APK as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Sonds-Android-APK
+          path: |
+            Sonds.apk
+            Sonds.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish or update GitHub Release for OTA
+        if: github.ref_type == 'tag' || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" = "tag" ]; then
+            RELEASE_TAG="$REF_NAME"
+          else
+            RELEASE_TAG="$RELEASE_TAG_INPUT"
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" Sonds.apk Sonds.apk.sha256 \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$RELEASE_TAG" Sonds.apk Sonds.apk.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "سندس دي أنا $RELEASE_TAG" \
+              --generate-notes
+          fi
