@@ -18,6 +18,7 @@ import {
   Heart,
   Info,
   LayoutDashboard,
+  List,
   LockKeyhole,
   Mic,
   Music2,
@@ -142,14 +143,8 @@ const formatMealTime = (time: string): string => {
 const navigation: Array<{ Icon: ComponentType<LucideProps>; id: string; label: string }> = [
   { Icon: LayoutDashboard, id: 'home', label: 'الرئيسية' },
   { Icon: CalendarDays, id: 'calendar', label: 'أوقاتي' },
-  { Icon: Trophy, id: 'trophy', label: 'إنجازاتي' },
-  { Icon: Activity, id: 'games', label: 'ألعابي' },
-  { Icon: ClipboardList, id: 'tasks', label: 'واجباتي' },
-  { Icon: Sparkles, id: 'smart', label: 'ذكائي اليومي' },
-  { Icon: Bell, id: 'azkar', label: 'أذكاري' },
-  { Icon: Info, id: 'info', label: 'معلومات' },
 ];
-const isKnownPage = (page: string): boolean => page === 'water' || navigation.some((item) => item.id === page);
+const isKnownPage = (page: string): boolean => page === 'water' || page === 'mylist' || navigation.some((item) => item.id === page);
 const notifyLocal = (title: string, body: string): void => {
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(title, { body });
 };
@@ -452,10 +447,10 @@ function App() {
       )}
       <div className="topbar">
         <div className="brand-mark"><span className="brand-paw">✦</span><div><strong>سندس دي أنا</strong><small>خطتي الصحية</small></div></div>
-        <div className="topbar-actions"><button className="icon-button" aria-label="تفعيل أو إيقاف الإشعارات" onClick={() => { setNotificationsEnabled((value) => !value); if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} title={notificationsEnabled ? "الإشعارات مفعلة" : "الإشعارات متوقفة"}><Bell size={19} />{notificationsEnabled && <i />}</button><div className="offline-badge">أوفلاين</div><div className="profile-badge">س</div></div>
+        <div className="topbar-actions"><button className="icon-button" aria-label="فتح قائمتي" onClick={() => changePage('mylist')} title="قائمتي"><List size={19} /></button><button className="icon-button" aria-label="تفعيل أو إيقاف الإشعارات" onClick={() => { setNotificationsEnabled((value) => !value); if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} title={notificationsEnabled ? "الإشعارات مفعلة" : "الإشعارات متوقفة"}><Bell size={19} />{notificationsEnabled && <i />}</button><div className="offline-badge">أوفلاين</div><div className="profile-badge">س</div></div>
       </div>
 
-      {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'أضيفي ألعابك الخاصة مع صورها واحفظيها على الجهاز.' : activeNav === 'tasks' ? 'أضيفي واجباتك وفعّلي تنبيهها من داخل التطبيق.' : activeNav === 'smart' ? 'اقتراحات صباحية ومسائية ذكية تعمل دون إنترنت.' : activeNav === 'azkar' ? 'أذكار الصباح والمساء محفوظة على جهازك مع تنبيه يومي.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
+      {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : activeNav === 'mylist' ? 'قائمتي' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'أضيفي ألعابك الخاصة مع صورها واحفظيها على الجهاز.' : activeNav === 'mylist' ? 'كل أدواتك اليومية مجمعة هنا: الألعاب والواجبات والذكاء والأذكار والماء.' : activeNav === 'tasks' ? 'أضيفي واجباتك وفعّلي تنبيهها من داخل التطبيق.' : activeNav === 'smart' ? 'اقتراحات صباحية ومسائية ذكية تعمل دون إنترنت.' : activeNav === 'azkar' ? 'أذكار الصباح والمساء محفوظة على جهازك مع تنبيه يومي.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
 
       <section hidden={activeNav !== 'home'} className="hero-card">
         <div className="hero-copy">
@@ -469,7 +464,7 @@ function App() {
       <section hidden={activeNav !== 'home'} className="jump-rope-promo games-home-promo">
         <div className="jump-rope-promo-icon"><Activity size={21} /></div>
         <div className="jump-rope-promo-copy"><span className="section-kicker">وقت ممتع لنفسك</span><h2>ألعاب حركة ونجوم!</h2><p>جرّبي الضغط والبلانك والرقص وتمارين لطيفة، أو أضيفي لعبتك الخاصة.</p></div>
-        <button type="button" onClick={() => changePage('games')}>اختاري لعبة <ChevronLeft size={17} /></button>
+        <button type="button" onClick={() => changePage('mylist')}>اختاري لعبة <ChevronLeft size={17} /></button>
       </section>
 
       <section hidden={activeNav !== 'home'} className="favorite-song-card">
@@ -509,12 +504,12 @@ function App() {
         {mealSaveNotice && <p className="meal-save-notice" role="status" aria-live="polite">{mealSaveNotice}</p>}
       </section>
 
-      <ActivityGames active={activeNav === 'games'} customGames={customActivities} stats={activityGameStats} onCustomGamesChange={setCustomActivities} onComplete={recordActivityGame} />
-      <TasksPage active={activeNav === 'tasks'} tasks={tasks} onChange={setTasks} />
-      <SmartDayPage active={activeNav === 'smart'} />
-      <AzkarPage active={activeNav === 'azkar'} data={azkar} onChange={setAzkar} onRequestNotification={() => { if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} />
+      <ActivityGames active={activeNav === 'mylist'} customGames={customActivities} stats={activityGameStats} onCustomGamesChange={setCustomActivities} onComplete={recordActivityGame} />
+      <TasksPage active={activeNav === 'mylist'} tasks={tasks} onChange={setTasks} />
+      <SmartDayPage active={activeNav === 'mylist'} />
+      <AzkarPage active={activeNav === 'mylist'} data={azkar} onChange={setAzkar} onRequestNotification={() => { if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} />
 
-      <section hidden={activeNav !== 'trophy' && activeNav !== 'info'} className="bottom-grid single-panel">
+      <section hidden={activeNav !== 'trophy' && activeNav !== 'info' && activeNav !== 'mylist'} className="bottom-grid single-panel">
         <div hidden={activeNav !== 'trophy'} className="reward-card">
           <div className="card-heading"><div className="reward-heading-icon"><Gift size={21} /></div><div><span className="section-kicker">تحفيز خاص</span><h2>صندوق الإنجازات</h2></div><Award size={24} className="heading-award" /></div>
           <p className="card-description">إنجازاتك الجديدة ستظهر هنا بعد البدء بنظام النقاط المحدّث.</p>
@@ -524,7 +519,7 @@ function App() {
         <button hidden={activeNav !== 'info'} type="button" className="water-info-card" onClick={() => changePage('water')}><span className="water-info-visual"><Droplets size={32} /><span>💧</span></span><span className="section-kicker">توتي يفكّرك بلطف</span><strong>ركن شرب الماء</strong><span className="water-info-description">علّمي أكوابك، راقبي أسبوعك، واختاري تذكيرًا صوتيًا يناسبك.</span><span className="water-info-link">افتحي سجل الماء <ChevronLeft size={16} /></span></button>
       </section>
 
-      <WaterTrackerPage active={activeNav === 'water'} data={waterData} onChange={setWaterData} onBack={() => changePage('info', true)} />
+      <WaterTrackerPage active={activeNav === 'mylist' || activeNav === 'water'} data={waterData} onChange={setWaterData} onBack={() => changePage('info', true)} />
 
       {activeNav === 'info' && <section className="info-actions-card"><span className="section-kicker">حول التطبيق</span><h2>سندس دي أنا</h2><p>خطتك الغذائية ومواعيد الوجبات محفوظة على هذا الجهاز. يمكنك إدارة التنبيهات والأذونات من هنا.</p><button type="button" onClick={() => setShowPermissionSettings(true)}><ShieldCheck size={18} /> إعدادات الجهاز والتنبيهات</button></section>}
 
