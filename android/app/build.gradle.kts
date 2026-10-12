@@ -16,7 +16,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sonds.totti"
+        applicationId = providers.gradleProperty("appId").orNull ?: "com.sonds.totti.v2"
         minSdk = 26
         targetSdk = 35
         versionCode = providers.gradleProperty("appVersionCode").orNull?.toIntOrNull() ?: 2
