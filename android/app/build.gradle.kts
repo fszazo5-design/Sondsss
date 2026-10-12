@@ -19,8 +19,8 @@ android {
         applicationId = "com.sonds.totti"
         minSdk = 26
         targetSdk = 35
-        versionCode = providers.gradleProperty("appVersionCode").orNull?.toIntOrNull() ?: 1
-        versionName = providers.gradleProperty("appVersionName").orNull ?: "1.0.0"
+        versionCode = providers.gradleProperty("appVersionCode").orNull?.toIntOrNull() ?: 2
+        versionName = providers.gradleProperty("appVersionName").orNull ?: "1.1.0"
     }
 
     signingConfigs {
