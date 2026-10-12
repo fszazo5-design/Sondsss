@@ -28,6 +28,7 @@ import {
   Star,
   ShieldCheck,
   Trophy,
+  ClipboardList,
   Utensils,
   Volume2,
   VolumeX,
@@ -37,6 +38,8 @@ import {
 } from 'lucide-react';
 import ActivityGames, { type ActivityGameStats, type CustomActivity } from './components/ActivityGames';
 import WaterTrackerPage, { type WaterTrackingData } from './components/WaterTrackerPage';
+import TasksPage, { type OfflineTask } from './components/TasksPage';
+import SmartDayPage from './components/SmartDayPage';
 import { chooseMealMessage, getMealMessageCategory } from './components/mealMessages';
 import favoriteSongVideo from './assets/favorite-song-with-sundus.mp4';
 import startupVideo from './assets/startup-video.mp4';
@@ -70,7 +73,7 @@ type Reward = {
   unlocked: boolean;
 };
 
-type PersistedPlan = { day?: SavedDay; rewards?: Reward[]; meals?: Meal[]; jumpRope?: { sessions: number; totalJumps: number; bestJumps: number }; activityGames?: ActivityGameStats; customActivities?: CustomActivity[]; water?: WaterTrackingData; mealMessages?: Record<string, string>; achievementVersion?: number };
+type PersistedPlan = { day?: SavedDay; rewards?: Reward[]; meals?: Meal[]; activityGames?: ActivityGameStats; customActivities?: CustomActivity[]; tasks?: OfflineTask[]; water?: WaterTrackingData; mealMessages?: Record<string, string>; achievementVersion?: number };
 
 const defaultMeals: Meal[] = [
   {
@@ -140,6 +143,8 @@ const navigation: Array<{ Icon: ComponentType<LucideProps>; id: string; label: s
   { Icon: CalendarDays, id: 'calendar', label: 'أوقاتي' },
   { Icon: Trophy, id: 'trophy', label: 'إنجازاتي' },
   { Icon: Activity, id: 'games', label: 'ألعابي' },
+  { Icon: ClipboardList, id: 'tasks', label: 'واجباتي' },
+  { Icon: Sparkles, id: 'smart', label: 'ذكائي اليومي' },
   { Icon: Info, id: 'info', label: 'معلومات' },
 ];
 const isKnownPage = (page: string): boolean => page === 'water' || navigation.some((item) => item.id === page);
@@ -147,8 +152,7 @@ const isKnownPage = (page: string): boolean => page === 'water' || navigation.so
 const ACHIEVEMENT_SYSTEM_VERSION = 2;
 const readSavedPlan = (): PersistedPlan => {
   try {
-    const nativeData = typeof window !== 'undefined' ? window.AndroidBridge?.loadState() : '';
-    const saved = nativeData || (typeof localStorage !== 'undefined' ? localStorage.getItem('sondos-totti-plan') : null);
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('sondos-totti-plan') : null;
     if (!saved) return {};
     const parsed = JSON.parse(saved) as PersistedPlan;
     return {
@@ -182,8 +186,10 @@ function App() {
   const [rewardTitle, setRewardTitle] = useState('');
   const [celebrationMeal, setCelebrationMeal] = useState<{ title: string; message: string } | null>(null);
   const [activeNav, setActiveNav] = useState('home');
-  const [activityGameStats, setActivityGameStats] = useState<ActivityGameStats>(() => bootData.activityGames ?? { sessions: bootData.jumpRope?.sessions ?? 0, totalReps: bootData.jumpRope?.totalJumps ?? 0, bestReps: bootData.jumpRope?.bestJumps ?? 0 });
+  const [activityGameStats, setActivityGameStats] = useState<ActivityGameStats>(() => bootData.activityGames ?? { sessions: 0, totalReps: 0, bestReps: 0 });
   const [customActivities, setCustomActivities] = useState<CustomActivity[]>(() => bootData.customActivities ?? []);
+  const [tasks, setTasks] = useState<OfflineTask[]>(() => bootData.tasks ?? []);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [mealMessages, setMealMessages] = useState<Record<string, string>>(() => bootData.mealMessages ?? {});
   const [waterData, setWaterData] = useState<WaterTrackingData>(() => ({
     dailyGoal: Math.min(16, Math.max(4, bootData.water?.dailyGoal ?? 8)),
@@ -275,9 +281,9 @@ function App() {
       day: { date: today, checked, completedMeals: meals.filter((meal) => checked[meal.id]).map((meal) => meal.id), score, streak },
       rewards,
       meals,
-      jumpRope: bootData.jumpRope,
       activityGames: activityGameStats,
       customActivities,
+      tasks,
       water: waterData,
       mealMessages,
       achievementVersion: ACHIEVEMENT_SYSTEM_VERSION,
@@ -285,18 +291,9 @@ function App() {
     try {
       localStorage.setItem('sondos-totti-plan', JSON.stringify(payload));
     } catch {
-      // SQLite through the Android bridge remains the durable source on file-based WebView origins.
+      // قد يمنع المتصفح التخزين في وضع خاص؛ يظل التطبيق قابلًا للاستخدام أثناء الجلسة.
     }
-    window.AndroidBridge?.saveState(JSON.stringify(payload));
-  }, [checked, meals, rewards, activityGameStats, customActivities, bootData.jumpRope, waterData, mealMessages, score, streak, today]);
-
-  useEffect(() => {
-    const waterReminders = waterData.remindersEnabled
-      ? waterData.reminderTimes.map((time) => ({ id: `water-reminder-${time.replace(':', '-')}`, title: 'شرب الماء', time }))
-      : [];
-    window.AndroidBridge?.saveSchedule(JSON.stringify([...meals.map(({ id, title, time }) => ({ id, title, time })), ...waterReminders]));
-  }, [meals, waterData.remindersEnabled, waterData.reminderTimes]);
-
+  }, [checked, meals, rewards, activityGameStats, customActivities, tasks, waterData, mealMessages, score, streak, today]);
 
 
   const startMealEdit = (meal: Meal): void => {
@@ -437,10 +434,10 @@ function App() {
       )}
       <div className="topbar">
         <div className="brand-mark"><span className="brand-paw">✦</span><div><strong>سندس دي أنا</strong><small>خطتي الصحية</small></div></div>
-        <div className="topbar-actions"><button className="icon-button" aria-label="طلب إذن الإشعارات" onClick={() => window.AndroidBridge?.requestNotificationPermission()}><Bell size={19} /><i /></button><button className="icon-button update-button" type="button" aria-label="تحديث الواجهة" title="تحديث الواجهة" onClick={() => window.AndroidBridge?.refreshWebApp()}><Download size={16} /></button><button className="icon-button" aria-label="إعدادات الأذونات" onClick={() => setShowPermissionSettings(true)}><ShieldCheck size={19} /></button><div className="profile-badge">س</div></div>
+        <div className="topbar-actions"><button className="icon-button" aria-label="تفعيل أو إيقاف الإشعارات" onClick={() => { setNotificationsEnabled((value) => !value); if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} title={notificationsEnabled ? "الإشعارات مفعلة" : "الإشعارات متوقفة"}><Bell size={19} />{notificationsEnabled && <i />}</button><div className="offline-badge">أوفلاين</div><div className="profile-badge">س</div></div>
       </div>
 
-      {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'اختاري لعبة حركة مرحة، أو أضيفي لعبتك الخاصة.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
+      {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'أضيفي ألعابك الخاصة مع صورها واحفظيها على الجهاز.' : activeNav === 'tasks' ? 'أضيفي واجباتك وفعّلي تنبيهها من داخل التطبيق.' : activeNav === 'smart' ? 'اقتراحات صباحية ومسائية ذكية تعمل دون إنترنت.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
 
       <section hidden={activeNav !== 'home'} className="hero-card">
         <div className="hero-copy">
@@ -495,6 +492,8 @@ function App() {
       </section>
 
       <ActivityGames active={activeNav === 'games'} customGames={customActivities} stats={activityGameStats} onCustomGamesChange={setCustomActivities} onComplete={recordActivityGame} />
+      <TasksPage active={activeNav === 'tasks'} tasks={tasks} onChange={setTasks} />
+      <SmartDayPage active={activeNav === 'smart'} />
 
       <section hidden={activeNav !== 'trophy' && activeNav !== 'info'} className="bottom-grid single-panel">
         <div hidden={activeNav !== 'trophy'} className="reward-card">
@@ -511,8 +510,6 @@ function App() {
       {activeNav === 'info' && <section className="info-actions-card"><span className="section-kicker">حول التطبيق</span><h2>سندس دي أنا</h2><p>خطتك الغذائية ومواعيد الوجبات محفوظة على هذا الجهاز. يمكنك إدارة التنبيهات والأذونات من هنا.</p><button type="button" onClick={() => setShowPermissionSettings(true)}><ShieldCheck size={18} /> إعدادات الجهاز والتنبيهات</button></section>}
 
       <footer hidden={activeNav !== 'home'}><span>صُنع بحب لسندس</span><span>تذكري: كل خطوة صغيرة انتصار كبير <Heart size={14} fill="currentColor" /></span></footer>
-
-      {showPermissionSettings && <div className="celebration-overlay permission-overlay"><section className="permission-modal" role="dialog" aria-modal="true" aria-labelledby="permission-title"><button className="close-modal" onClick={() => setShowPermissionSettings(false)} aria-label="إغلاق"><X size={18} /></button><div className="permission-icon"><ShieldCheck size={27} /></div><span className="section-kicker">إعدادات الجهاز</span><h2 id="permission-title">الأذونات والتنبيهات</h2><p>يظهر طلب السماح تلقائيًا عند فتح التطبيق، ويمكنك إعادة طلبه من هنا.</p><div className="permission-actions"><button onClick={() => window.AndroidBridge?.checkForAppUpdate()}><Download size={19} /><span><b>تحديث نظام Android (APK)</b><small>للتغييرات الأصلية في Kotlin أو أذونات الجهاز فقط</small></span></button><button onClick={() => window.AndroidBridge?.requestNotificationPermission()}><Bell size={19} /><span><b>السماح بتنبيهات الوجبات والماء</b><small>تذكيرات محلية لجدول الوجبات ومواعيد الماء</small></span></button><button onClick={() => window.AndroidBridge?.requestExactAlarmAccess()}><Clock size={19} /><span><b>ضبط دقة مواعيد التنبيه</b><small>يفتح إعدادات المنبهات الدقيقة في Android</small></span></button><button onClick={() => window.AndroidBridge?.requestCameraPermission()}><Camera size={19} /><span><b>إذن الكاميرا</b><small>السماح باستخدام الكاميرا عند الحاجة</small></span></button><button onClick={() => window.AndroidBridge?.requestMicrophonePermission()}><Mic size={19} /><span><b>إذن الميكروفون</b><small>السماح باستخدام الميكروفون عند الحاجة</small></span></button></div></section></div>}
 
       {showFavoriteSong && <div className="celebration-overlay favorite-song-overlay" onClick={() => setShowFavoriteSong(false)}><section className="favorite-song-modal" role="dialog" aria-modal="true" aria-labelledby="favorite-song-title" onClick={(event) => event.stopPropagation()}><button className="close-modal" onClick={() => setShowFavoriteSong(false)} aria-label="إغلاق الفيديو"><X size={18} /></button><div className="favorite-song-modal-heading"><div className="favorite-song-icon"><Music2 size={22} /></div><div><span className="section-kicker">أغنية سندس</span><h2 id="favorite-song-title">أغنيتي المفضلة مع سندس</h2></div></div><video className="favorite-song-video" controls playsInline preload="metadata" src={favoriteSongVideo} /><p className="favorite-song-caption">استمتعي بالمشاهدة والاستماع مع كلمات الأغنية.</p></section></div>}
 

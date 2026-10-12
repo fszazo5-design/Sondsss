@@ -12,6 +12,7 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
+    "ignoreDeprecations": "5.0",
     "jsx": "react-jsx",
 
     /* Path alias — depth-invariant imports for src (@/foo === src/foo from any file) */
