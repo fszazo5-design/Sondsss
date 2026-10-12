@@ -143,6 +143,7 @@ const formatMealTime = (time: string): string => {
 const navigation: Array<{ Icon: ComponentType<LucideProps>; id: string; label: string }> = [
   { Icon: LayoutDashboard, id: 'home', label: 'الرئيسية' },
   { Icon: CalendarDays, id: 'calendar', label: 'أوقاتي' },
+  { Icon: List, id: 'mylist', label: 'قائمتي' },
 ];
 const isKnownPage = (page: string): boolean => page === 'water' || page === 'mylist' || navigation.some((item) => item.id === page);
 const notifyLocal = (title: string, body: string): void => {
@@ -447,7 +448,7 @@ function App() {
       )}
       <div className="topbar">
         <div className="brand-mark"><span className="brand-paw">✦</span><div><strong>سندس دي أنا</strong><small>خطتي الصحية</small></div></div>
-        <div className="topbar-actions"><button className="icon-button" aria-label="فتح قائمتي" onClick={() => changePage('mylist')} title="قائمتي"><List size={19} /></button><button className="icon-button" aria-label="تفعيل أو إيقاف الإشعارات" onClick={() => { setNotificationsEnabled((value) => !value); if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} title={notificationsEnabled ? "الإشعارات مفعلة" : "الإشعارات متوقفة"}><Bell size={19} />{notificationsEnabled && <i />}</button><div className="offline-badge">أوفلاين</div><div className="profile-badge">س</div></div>
+        <div className="topbar-actions"><button className="icon-button" aria-label="تفعيل أو إيقاف الإشعارات" onClick={() => { setNotificationsEnabled((value) => !value); if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} title={notificationsEnabled ? "الإشعارات مفعلة" : "الإشعارات متوقفة"}><Bell size={19} />{notificationsEnabled && <i />}</button><div className="offline-badge">أوفلاين</div><div className="profile-badge">س</div></div>
       </div>
 
       {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : activeNav === 'mylist' ? 'قائمتي' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'أضيفي ألعابك الخاصة مع صورها واحفظيها على الجهاز.' : activeNav === 'mylist' ? 'كل أدواتك اليومية مجمعة هنا: الألعاب والواجبات والذكاء والأذكار والماء.' : activeNav === 'tasks' ? 'أضيفي واجباتك وفعّلي تنبيهها من داخل التطبيق.' : activeNav === 'smart' ? 'اقتراحات صباحية ومسائية ذكية تعمل دون إنترنت.' : activeNav === 'azkar' ? 'أذكار الصباح والمساء محفوظة على جهازك مع تنبيه يومي.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
