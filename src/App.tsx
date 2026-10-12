@@ -40,6 +40,7 @@ import ActivityGames, { type ActivityGameStats, type CustomActivity } from './co
 import WaterTrackerPage, { type WaterTrackingData } from './components/WaterTrackerPage';
 import TasksPage, { type OfflineTask } from './components/TasksPage';
 import SmartDayPage from './components/SmartDayPage';
+import AzkarPage, { type AzkarState } from './components/AzkarPage';
 import { chooseMealMessage, getMealMessageCategory } from './components/mealMessages';
 import favoriteSongVideo from './assets/favorite-song-with-sundus.mp4';
 import startupVideo from './assets/startup-video.mp4';
@@ -73,7 +74,7 @@ type Reward = {
   unlocked: boolean;
 };
 
-type PersistedPlan = { day?: SavedDay; rewards?: Reward[]; meals?: Meal[]; activityGames?: ActivityGameStats; customActivities?: CustomActivity[]; tasks?: OfflineTask[]; water?: WaterTrackingData; mealMessages?: Record<string, string>; achievementVersion?: number };
+type PersistedPlan = { day?: SavedDay; rewards?: Reward[]; meals?: Meal[]; activityGames?: ActivityGameStats; customActivities?: CustomActivity[]; tasks?: OfflineTask[]; azkar?: AzkarState; water?: WaterTrackingData; mealMessages?: Record<string, string>; achievementVersion?: number };
 
 const defaultMeals: Meal[] = [
   {
@@ -145,9 +146,13 @@ const navigation: Array<{ Icon: ComponentType<LucideProps>; id: string; label: s
   { Icon: Activity, id: 'games', label: 'ألعابي' },
   { Icon: ClipboardList, id: 'tasks', label: 'واجباتي' },
   { Icon: Sparkles, id: 'smart', label: 'ذكائي اليومي' },
+  { Icon: Bell, id: 'azkar', label: 'أذكاري' },
   { Icon: Info, id: 'info', label: 'معلومات' },
 ];
 const isKnownPage = (page: string): boolean => page === 'water' || navigation.some((item) => item.id === page);
+const notifyLocal = (title: string, body: string): void => {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(title, { body });
+};
 
 const ACHIEVEMENT_SYSTEM_VERSION = 2;
 const readSavedPlan = (): PersistedPlan => {
@@ -189,6 +194,7 @@ function App() {
   const [activityGameStats, setActivityGameStats] = useState<ActivityGameStats>(() => bootData.activityGames ?? { sessions: 0, totalReps: 0, bestReps: 0 });
   const [customActivities, setCustomActivities] = useState<CustomActivity[]>(() => bootData.customActivities ?? []);
   const [tasks, setTasks] = useState<OfflineTask[]>(() => bootData.tasks ?? []);
+  const [azkar, setAzkar] = useState<AzkarState>(() => bootData.azkar ?? { morningDone: [], eveningDone: [], remindersEnabled: true, morningTime: '06:30', eveningTime: '18:00' });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [mealMessages, setMealMessages] = useState<Record<string, string>>(() => bootData.mealMessages ?? {});
   const [waterData, setWaterData] = useState<WaterTrackingData>(() => ({
@@ -284,6 +290,7 @@ function App() {
       activityGames: activityGameStats,
       customActivities,
       tasks,
+      azkar,
       water: waterData,
       mealMessages,
       achievementVersion: ACHIEVEMENT_SYSTEM_VERSION,
@@ -293,7 +300,18 @@ function App() {
     } catch {
       // قد يمنع المتصفح التخزين في وضع خاص؛ يظل التطبيق قابلًا للاستخدام أثناء الجلسة.
     }
-  }, [checked, meals, rewards, activityGameStats, customActivities, tasks, waterData, mealMessages, score, streak, today]);
+  }, [checked, meals, rewards, activityGameStats, customActivities, tasks, azkar, waterData, mealMessages, score, streak, today]);
+
+
+  useEffect(() => {
+    if (!notificationsEnabled || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    const minute = `${today}-${now.getHours()}:${now.getMinutes()}`;
+    const alreadyNotified = (key: string) => { const fullKey = `sonds-notified-${today}-${key}`; if (sessionStorage.getItem(fullKey) === minute) return true; sessionStorage.setItem(fullKey, minute); return false; };
+    meals.forEach((meal) => { if (meal.time === `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` && !checked[meal.id] && !alreadyNotified(`meal-${meal.id}`)) notifyLocal(`موعد ${meal.title}`, `حان الآن موعد ${meal.title}.`); });
+    waterData.reminderTimes.forEach((time) => { if (time === `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` && waterData.remindersEnabled && !alreadyNotified(`water-${time}`)) notifyLocal('تذكير شرب الماء', 'اشربي كوب ماء الآن.'); });
+    if (azkar.remindersEnabled) { if (azkar.morningTime === `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` && !alreadyNotified('azkar-morning')) notifyLocal('أذكار الصباح', 'حان وقت أذكار الصباح.'); if (azkar.eveningTime === `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` && !alreadyNotified('azkar-evening')) notifyLocal('أذكار المساء', 'حان وقت أذكار المساء.'); }
+    tasks.filter((task) => task.reminder && task.due).forEach((task) => { if (task.due.slice(0, 16) === `${today}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` && !alreadyNotified(`task-${task.id}`)) notifyLocal('تنبيه واجب', task.title); });
+  }, [now, today, meals, checked, waterData, azkar, tasks, notificationsEnabled]);
 
 
   const startMealEdit = (meal: Meal): void => {
@@ -437,7 +455,7 @@ function App() {
         <div className="topbar-actions"><button className="icon-button" aria-label="تفعيل أو إيقاف الإشعارات" onClick={() => { setNotificationsEnabled((value) => !value); if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} title={notificationsEnabled ? "الإشعارات مفعلة" : "الإشعارات متوقفة"}><Bell size={19} />{notificationsEnabled && <i />}</button><div className="offline-badge">أوفلاين</div><div className="profile-badge">س</div></div>
       </div>
 
-      {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'أضيفي ألعابك الخاصة مع صورها واحفظيها على الجهاز.' : activeNav === 'tasks' ? 'أضيفي واجباتك وفعّلي تنبيهها من داخل التطبيق.' : activeNav === 'smart' ? 'اقتراحات صباحية ومسائية ذكية تعمل دون إنترنت.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
+      {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'أضيفي ألعابك الخاصة مع صورها واحفظيها على الجهاز.' : activeNav === 'tasks' ? 'أضيفي واجباتك وفعّلي تنبيهها من داخل التطبيق.' : activeNav === 'smart' ? 'اقتراحات صباحية ومسائية ذكية تعمل دون إنترنت.' : activeNav === 'azkar' ? 'أذكار الصباح والمساء محفوظة على جهازك مع تنبيه يومي.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
 
       <section hidden={activeNav !== 'home'} className="hero-card">
         <div className="hero-copy">
@@ -494,6 +512,7 @@ function App() {
       <ActivityGames active={activeNav === 'games'} customGames={customActivities} stats={activityGameStats} onCustomGamesChange={setCustomActivities} onComplete={recordActivityGame} />
       <TasksPage active={activeNav === 'tasks'} tasks={tasks} onChange={setTasks} />
       <SmartDayPage active={activeNav === 'smart'} />
+      <AzkarPage active={activeNav === 'azkar'} data={azkar} onChange={setAzkar} onRequestNotification={() => { if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} />
 
       <section hidden={activeNav !== 'trophy' && activeNav !== 'info'} className="bottom-grid single-panel">
         <div hidden={activeNav !== 'trophy'} className="reward-card">
