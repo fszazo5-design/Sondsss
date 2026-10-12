@@ -2,7 +2,9 @@ package com.sonds.totti
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -11,10 +13,12 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.ValueCallback
 import androidx.webkit.WebViewAssetLoader
 
 class MainActivity : Activity() {
     private lateinit var webView: WebView
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,7 +40,26 @@ class MainActivity : Activity() {
             settings.allowFileAccessFromFileURLs = false
             settings.allowUniversalAccessFromFileURLs = false
             settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-            webChromeClient = WebChromeClient()
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowFileChooser(
+                    view: WebView?,
+                    callback: ValueCallback<Array<Uri>>?,
+                    params: FileChooserParams?,
+                ): Boolean {
+                    filePathCallback?.onReceiveValue(null)
+                    filePathCallback = callback
+                    return try {
+                        startActivityForResult(params?.createIntent() ?: Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "image/*"
+                        }, FILE_CHOOSER_REQUEST)
+                        true
+                    } catch (_: Exception) {
+                        filePathCallback = null
+                        false
+                    }
+                }
+            }
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView, request: android.webkit.WebResourceRequest) =
                     if (request.url.host == LOCAL_ASSET_HOST) assetLoader.shouldInterceptRequest(request.url) else null
@@ -46,6 +69,16 @@ class MainActivity : Activity() {
         setContentView(webView)
         webView.loadUrl(APP_ASSET_START_URL)
         Handler(Looper.getMainLooper()).postDelayed({ requestNotificationPermission() }, 500)
+    }
+
+    @Deprecated("Deprecated in Android API; retained for broad device compatibility")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            val result = if (resultCode == RESULT_OK && data?.data != null) arrayOf(data.data!!) else null
+            filePathCallback?.onReceiveValue(result)
+            filePathCallback = null
+        }
+        super.onActivityResult(requestCode, resultCode, data)
     }
 
     @Deprecated("Deprecated in Android API; retained for broad device compatibility")
@@ -67,5 +100,6 @@ class MainActivity : Activity() {
     private companion object {
         const val LOCAL_ASSET_HOST = "appassets.androidplatform.net"
         const val APP_ASSET_START_URL = "https://appassets.androidplatform.net/assets/www/index.html"
+        const val FILE_CHOOSER_REQUEST = 402
     }
 }
