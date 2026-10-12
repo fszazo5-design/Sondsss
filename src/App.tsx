@@ -23,6 +23,7 @@ import {
   Mic,
   Music2,
   Pencil,
+  Palette,
   Plus,
   Save,
   Sparkles,
@@ -42,6 +43,7 @@ import WaterTrackerPage, { type WaterTrackingData } from './components/WaterTrac
 import TasksPage, { type OfflineTask } from './components/TasksPage';
 import SmartDayPage from './components/SmartDayPage';
 import AzkarPage, { type AzkarState } from './components/AzkarPage';
+import ThemeSettingsPage, { defaultTheme, type ThemeSettings } from './components/ThemeSettingsPage';
 import { chooseMealMessage, getMealMessageCategory } from './components/mealMessages';
 import favoriteSongVideo from './assets/favorite-song-with-sundus.mp4';
 import startupVideo from './assets/startup-video.mp4';
@@ -75,7 +77,7 @@ type Reward = {
   unlocked: boolean;
 };
 
-type PersistedPlan = { day?: SavedDay; rewards?: Reward[]; meals?: Meal[]; activityGames?: ActivityGameStats; customActivities?: CustomActivity[]; tasks?: OfflineTask[]; azkar?: AzkarState; water?: WaterTrackingData; mealMessages?: Record<string, string>; achievementVersion?: number };
+type PersistedPlan = { day?: SavedDay; rewards?: Reward[]; meals?: Meal[]; activityGames?: ActivityGameStats; customActivities?: CustomActivity[]; tasks?: OfflineTask[]; azkar?: AzkarState; theme?: ThemeSettings; water?: WaterTrackingData; mealMessages?: Record<string, string>; achievementVersion?: number };
 
 const defaultMeals: Meal[] = [
   {
@@ -145,7 +147,7 @@ const navigation: Array<{ Icon: ComponentType<LucideProps>; id: string; label: s
   { Icon: CalendarDays, id: 'calendar', label: 'أوقاتي' },
   { Icon: List, id: 'mylist', label: 'قائمتي' },
 ];
-const isKnownPage = (page: string): boolean => page === 'water' || page === 'mylist' || navigation.some((item) => item.id === page);
+const isKnownPage = (page: string): boolean => page === 'water' || page === 'mylist' || page === 'colors' || navigation.some((item) => item.id === page);
 const notifyLocal = (title: string, body: string): void => {
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(title, { body });
 };
@@ -191,6 +193,7 @@ function App() {
   const [customActivities, setCustomActivities] = useState<CustomActivity[]>(() => bootData.customActivities ?? []);
   const [tasks, setTasks] = useState<OfflineTask[]>(() => bootData.tasks ?? []);
   const [azkar, setAzkar] = useState<AzkarState>(() => bootData.azkar ?? { morningDone: [], eveningDone: [], remindersEnabled: true, morningTime: '06:30', eveningTime: '18:00' });
+  const [theme, setTheme] = useState<ThemeSettings>(() => ({ ...defaultTheme, ...(bootData.theme ?? {}) }));
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [mealMessages, setMealMessages] = useState<Record<string, string>>(() => bootData.mealMessages ?? {});
   const [waterData, setWaterData] = useState<WaterTrackingData>(() => ({
@@ -214,6 +217,17 @@ function App() {
       bestReps: Math.max(current.bestReps, reps),
     }));
   };
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--theme-primary', theme.primary);
+    root.style.setProperty('--theme-secondary', theme.secondary);
+    root.style.setProperty('--theme-background', theme.background);
+    root.style.setProperty('--theme-surface', theme.surface);
+    root.style.setProperty('--theme-text', theme.text);
+    root.style.setProperty('--theme-success', theme.success);
+    root.style.setProperty('--theme-accent', theme.accent);
+  }, [theme]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -287,6 +301,7 @@ function App() {
       customActivities,
       tasks,
       azkar,
+      theme,
       water: waterData,
       mealMessages,
       achievementVersion: ACHIEVEMENT_SYSTEM_VERSION,
@@ -296,7 +311,7 @@ function App() {
     } catch {
       // قد يمنع المتصفح التخزين في وضع خاص؛ يظل التطبيق قابلًا للاستخدام أثناء الجلسة.
     }
-  }, [checked, meals, rewards, activityGameStats, customActivities, tasks, azkar, waterData, mealMessages, score, streak, today]);
+  }, [checked, meals, rewards, activityGameStats, customActivities, tasks, azkar, theme, waterData, mealMessages, score, streak, today]);
 
 
   useEffect(() => {
@@ -451,7 +466,7 @@ function App() {
         <div className="topbar-actions"><button className="icon-button" aria-label="تفعيل أو إيقاف الإشعارات" onClick={() => { setNotificationsEnabled((value) => !value); if (typeof Notification !== 'undefined' && Notification.permission === 'default') void Notification.requestPermission(); }} title={notificationsEnabled ? "الإشعارات مفعلة" : "الإشعارات متوقفة"}><Bell size={19} />{notificationsEnabled && <i />}</button><div className="offline-badge">أوفلاين</div><div className="profile-badge">س</div></div>
       </div>
 
-      {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : activeNav === 'mylist' ? 'قائمتي' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'أضيفي ألعابك الخاصة مع صورها واحفظيها على الجهاز.' : activeNav === 'mylist' ? 'كل أدواتك اليومية مجمعة هنا: الألعاب والواجبات والذكاء والأذكار والماء.' : activeNav === 'tasks' ? 'أضيفي واجباتك وفعّلي تنبيهها من داخل التطبيق.' : activeNav === 'smart' ? 'اقتراحات صباحية ومسائية ذكية تعمل دون إنترنت.' : activeNav === 'azkar' ? 'أذكار الصباح والمساء محفوظة على جهازك مع تنبيه يومي.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
+      {activeNav !== 'home' && <section className="page-heading"><div><span className="section-kicker">سندس دي أنا</span><h1>{activeNav === 'water' ? 'متابعة شرب الماء' : activeNav === 'colors' ? 'ألوان التطبيق' : activeNav === 'mylist' ? 'قائمتي' : navigation.find((item) => item.id === activeNav)?.label}</h1><p>{activeNav === 'calendar' ? 'عدّلي مواعيد وجباتك واحفظي أوقاتك اليومية.' : activeNav === 'trophy' ? 'تابعي تقدمك والجوائز التي حققتها.' : activeNav === 'games' ? 'أضيفي ألعابك الخاصة مع صورها واحفظيها على الجهاز.' : activeNav === 'mylist' ? 'كل أدواتك اليومية مجمعة هنا: الألعاب والواجبات والذكاء والأذكار والماء والألوان.' : activeNav === 'colors' ? 'اختاري ألوان التطبيق بنفسك، وستُحفظ على هذا الجهاز.' : activeNav === 'tasks' ? 'أضيفي واجباتك وفعّلي تنبيهها من داخل التطبيق.' : activeNav === 'smart' ? 'اقتراحات صباحية ومسائية ذكية تعمل دون إنترنت.' : activeNav === 'azkar' ? 'أذكار الصباح والمساء محفوظة على جهازك مع تنبيه يومي.' : activeNav === 'water' ? 'سجلّ لطيف لأكوابك وأيامك وتنبيهاتك.' : 'معلومات ونصائح وإعدادات التطبيق.'}</p></div></section>}
 
       <section hidden={activeNav !== 'home'} className="hero-card">
         <div className="hero-copy">
@@ -505,6 +520,8 @@ function App() {
         {mealSaveNotice && <p className="meal-save-notice" role="status" aria-live="polite">{mealSaveNotice}</p>}
       </section>
 
+      <section hidden={activeNav !== 'mylist'} className="mylist-color-card"><div><span className="section-kicker"><Palette size={14} /> تخصيص الشكل</span><h2>ألوان تطبيقي</h2><p>خلي التطبيق بألوانك أنتِ واختاري كل لون كما تحبين.</p></div><button type="button" onClick={() => changePage('colors')}><Palette size={17} /> تغيير الألوان</button></section>
+      <ThemeSettingsPage active={activeNav === 'colors'} theme={theme} onChange={setTheme} onBack={() => changePage('mylist')} />
       <ActivityGames active={activeNav === 'mylist'} customGames={customActivities} stats={activityGameStats} onCustomGamesChange={setCustomActivities} onComplete={recordActivityGame} />
       <TasksPage active={activeNav === 'mylist'} tasks={tasks} onChange={setTasks} />
       <SmartDayPage active={activeNav === 'mylist'} />
